@@ -41,7 +41,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Lock,
+  Unlock,
+  LayoutTemplate, 
+  Plus,           
+  Trash2,         
+  MoreHorizontal  
 } from 'lucide-react';
 
 // --- ダミーデータ生成関数 ---
@@ -72,33 +78,29 @@ const generateDummyData = (count) => {
     const carName = carNames[Math.floor(Math.random() * carNames.length)];
     
     // 日付生成 (2026年)
-    // 1月〜4月くらいを中心に生成
     const start = new Date('2026-01-01').getTime();
     const end = new Date('2026-05-30').getTime();
     const orderTime = start + Math.random() * (end - start);
     const orderDateObj = new Date(orderTime);
     const orderDate = orderDateObj.toISOString().split('T')[0];
 
-    // ETDはOrderの15~45日後
     const etdTime = orderTime + (15 + Math.random() * 30) * 24 * 60 * 60 * 1000;
     const etdDateObj = new Date(etdTime);
     const etd = etdDateObj.toISOString().split('T')[0];
 
-    // B/LはETDの2~7日後 (未発行のものも混ぜる)
     let blDate = '';
-    if (Math.random() > 0.15) { // 85%は発行済み
+    if (Math.random() > 0.15) { 
         const blTime = etdTime + (2 + Math.random() * 5) * 24 * 60 * 60 * 1000;
         blDate = new Date(blTime).toISOString().split('T')[0];
     }
 
-    // 書類やフラグもランダムに欠落させる
     const invCustoms = Math.random() > 0.1 ? `INV-C-${90000 + id}` : '';
     const flagDereg = Math.random() > 0.2 ? '完了' : '未';
     const flagOdo = Math.random() > 0.2 ? '完了' : '未';
 
     return {
       id,
-      chassis: `ABC-${100000 + id}`, // 車台番号
+      chassis: `ABC-${100000 + id}`, 
       orderNo: `ORD-${20260000 + id}`,
       orderDate,
       customer,
@@ -118,63 +120,165 @@ const generateDummyData = (count) => {
   });
 };
 
+// --- 列幅入力用コンポーネント ---
+const ColumnWidthInput = ({ colId, width, onUpdate }) => {
+  const [tempValue, setTempValue] = useState(width);
+
+  useEffect(() => {
+    setTempValue(width);
+  }, [width]);
+
+  const handleChange = (e) => {
+    setTempValue(e.target.value);
+  };
+
+  const handleBlur = () => {
+    const val = parseInt(tempValue);
+    if (!isNaN(val) && val > 0) {
+      onUpdate(colId, val);
+    } else {
+      setTempValue(width); 
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleBlur();
+      e.target.blur();
+    }
+  };
+
+  return (
+    <input 
+      type="number" 
+      value={tempValue}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      className="w-14 p-1 border border-slate-200 rounded text-right text-[10px] focus:ring-1 ring-indigo-500 outline-none"
+    />
+  );
+};
+
+// --- 共通フィルタフォームコンポーネント ---
+const FilterForm = ({ 
+  conditions, 
+  setConditions, 
+  showCustomer = true, 
+  onReset,
+  uniquePols,      
+  uniquePods,      
+  uniqueCountries  
+}) => {
+  const update = (field, value) => setConditions(prev => ({ ...prev, [field]: value }));
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">積出港 (POL)</label>
+          <select value={conditions.pol || 'all'} onChange={(e) => update('pol', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
+            <option value="all">指定なし</option>
+            {uniquePols.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">荷揚港 (POD)</label>
+          <select value={conditions.pod || 'all'} onChange={(e) => update('pod', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
+            <option value="all">指定なし</option>
+            {uniquePods.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Calendar size={12}/> ETD 期間</label>
+        <div className="flex items-center gap-2">
+          <input type="date" value={conditions.etdFrom || ''} onChange={(e) => update('etdFrom', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px]" />
+          <span className="text-slate-400">~</span>
+          <input type="date" value={conditions.etdTo || ''} onChange={(e) => update('etdTo', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px]" />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Calendar size={12}/> B/L日 期間</label>
+        <div className="flex items-center gap-2">
+          <input type="date" value={conditions.blDateFrom || ''} onChange={(e) => update('blDateFrom', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px]" />
+          <span className="text-slate-400">~</span>
+          <input type="date" value={conditions.blDateTo || ''} onChange={(e) => update('blDateTo', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px]" />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-bold text-slate-400 uppercase">荷揚国</label>
+        <select value={conditions.country || 'all'} onChange={(e) => update('country', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
+          <option value="all">指定なし</option>
+          {uniqueCountries.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">抹消ステータス</label>
+          <select value={conditions.flagDereg || 'all'} onChange={(e) => update('flagDereg', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
+            <option value="all">指定なし</option>
+            <option value="complete">完了のみ</option>
+            <option value="incomplete">未完了のみ</option>
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">ODOステータス</label>
+          <select value={conditions.flagOdo || 'all'} onChange={(e) => update('flagOdo', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
+            <option value="all">指定なし</option>
+            <option value="complete">完了のみ</option>
+            <option value="incomplete">未完了のみ</option>
+          </select>
+        </div>
+      </div>
+
+      {showCustomer && (
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold text-slate-400 uppercase">顧客</label>
+          <select value={conditions.customer || 'all'} onChange={(e) => update('customer', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
+            <option value="all">指定なし</option>
+            <option value="Global Motors">Global Motors</option>
+            <option value="Pacific Trading">Pacific Trading</option>
+            <option value="Euro Cars">Euro Cars</option>
+          </select>
+        </div>
+      )}
+      
+      {onReset && (
+         <button onClick={onReset} className="w-full py-2 text-[11px] text-slate-500 font-bold hover:bg-slate-100 rounded border border-slate-200 transition-all flex items-center justify-center gap-1">
+           <ResetIcon size={12} /> 条件をリセット
+         </button>
+      )}
+    </div>
+  );
+};
+
 const App = () => {
   // --- 1. カラム（列）の初期定義 ---
   const initialColumns = [
     { id: 'rowNo', label: 'No.', width: 50, sticky: true, visible: true },
     { id: 'chassis', label: '車台番号', width: 140, sticky: true, visible: true },
     { id: 'orderNo', label: '受注番号', width: 110, visible: true },
-    { id: 'orderDate', label: '受注日', width: 100, visible: true },
-    { id: 'customer', label: '顧客名', width: 140, visible: true },
-    { id: 'vessel', label: '船名', width: 120, visible: true },
+    { id: 'orderDate', label: '受注日付', width: 100, visible: true },
+    { id: 'customer', label: 'ORDERER(CONSIGNEE)', width: 140, visible: true },
+    { id: 'vessel', label: '船名・航海番号', width: 120, visible: true },
     { id: 'pol', label: '積出港', width: 100, visible: true },
     { id: 'etd', label: 'ETD', width: 110, visible: true },
     { id: 'pod', label: '荷揚港', width: 100, visible: true },
     { id: 'country', label: '荷揚国', width: 110, visible: true },
     { id: 'carName', label: '車名', width: 130, visible: true },
     { id: 'flagDereg', label: '抹消完了', width: 90, visible: true },
-    { id: 'flagOdo', label: 'ODO完了', width: 90, visible: true },
-    { id: 'invCustoms', label: '通関INV', width: 130, visible: true },
-    { id: 'siNo', label: 'S/i番号', width: 110, visible: true },
-    { id: 'invSales', label: '売上INV', width: 130, visible: true },
-    { id: 'blDate', label: 'B/L日', width: 100, visible: true },
+    { id: 'flagOdo', label: 'ODO検査完了', width: 90, visible: true },
+    { id: 'invCustoms', label: '通関インボイス番号', width: 130, visible: true },
+    { id: 'siNo', label: 'S/I No', width: 110, visible: true },
+    { id: 'invSales', label: '売上インボイス番号', width: 130, visible: true },
+    { id: 'blDate', label: 'B/L Issue Date', width: 100, visible: true },
   ];
 
-  const [columns, setColumns] = useState(initialColumns);
-
-  // --- 2. データセット (1000件生成) ---
-  const [data, setData] = useState(() => generateDummyData(1000));
-  
-  const [selectedRow, setSelectedRow] = useState(null);
-  const [editingRowId, setEditingRowId] = useState(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('filter');
-  
-  // ソート設定
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-
-  // ページネーション設定
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
-
-  // ドラッグ＆ドロップ用の参照
-  const dragItem = useRef(null);
-  const dragOverItem = useRef(null);
-
-  // リサイズ用の参照
-  const resizingColumn = useRef(null);
-  const startX = useRef(0);
-  const startWidth = useRef(0);
-   
-  const [highlightedRows, setHighlightedRows] = useState([]);
-  const [rangeFillState, setRangeFillState] = useState({ isOpen: false, startRowId: null, field: null, targetRowNumber: '' });
-
-  // 選択肢の生成（ユニーク値）
-  const uniquePols = useMemo(() => [...new Set(data.map(d => d.pol).filter(Boolean))].sort(), [data]);
-  const uniquePods = useMemo(() => [...new Set(data.map(d => d.pod).filter(Boolean))].sort(), [data]);
-  const uniqueCountries = useMemo(() => [...new Set(data.map(d => d.country).filter(Boolean))].sort(), [data]);
-
-  // --- 3. 強化：フィルターの状態 ---
+  // --- 初期設定値の定義 (ビュー機能で利用) ---
   const defaultFilterConditions = {
     pol: 'all',
     etdFrom: '',
@@ -188,20 +292,6 @@ const App = () => {
     customer: 'all',
   };
 
-  const [searchText, setSearchText] = useState('');
-  const [filterConditions, setFilterConditions] = useState(defaultFilterConditions);
-
-  // --- 4. 強化：警告設定 ---
-  const [warningSettings, setWarningSettings] = useState({
-    etdEnabled: true,
-    etdDays: 7,
-    missingInvoiceEnabled: true,
-    missingFlagEnabled: true,
-    alertTheme: 'rose',
-    customAlertColor: '#e11d48'
-  });
-
-  // --- 5. 強化：表示設定 ---
   const defaultHighlightConditions = {
     active: false,
     pol: 'all',
@@ -216,7 +306,16 @@ const App = () => {
     customer: 'all',
   };
 
-  const [displaySettings, setDisplaySettings] = useState({
+  const initialWarningSettings = {
+    etdEnabled: true,
+    etdDays: 7,
+    missingInvoiceEnabled: true,
+    missingFlagEnabled: true,
+    alertTheme: 'rose',
+    customAlertColor: '#e11d48',
+  };
+
+  const initialDisplaySettings = {
     rowDensity: 'compact',
     headerColor: '#1e293b',
     autoHighlightEnabled: true,
@@ -224,9 +323,102 @@ const App = () => {
     highlightColor: '#fff7ed',
     borderColor: '#e2e8f0',
     textColor: '#1e293b',
-  });
+  };
 
-  // アラートのテーマ定義
+  // --- State定義 ---
+  const [columns, setColumns] = useState(initialColumns);
+  const [data, setData] = useState(() => generateDummyData(1000));
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [editingRowId, setEditingRowId] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('filter');
+  // ソート設定を配列に変更
+  const [sortConfig, setSortConfig] = useState([]); 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [searchText, setSearchText] = useState('');
+  const [filterConditions, setFilterConditions] = useState(defaultFilterConditions);
+  const [warningSettings, setWarningSettings] = useState(initialWarningSettings);
+  const [displaySettings, setDisplaySettings] = useState(initialDisplaySettings);
+  
+  const [highlightedRows, setHighlightedRows] = useState([]);
+  const [rangeFillState, setRangeFillState] = useState({ isOpen: false, startRowId: null, field: null, targetRowNumber: '' });
+
+  // --- ビュー管理用State ---
+  const [views, setViews] = useState([
+    {
+      id: 'default',
+      name: '標準ビュー',
+      settings: {
+        columns: initialColumns,
+        filterConditions: defaultFilterConditions,
+        sortConfig: [],
+        warningSettings: initialWarningSettings,
+        displaySettings: initialDisplaySettings
+      }
+    }
+  ]);
+  const [currentViewId, setCurrentViewId] = useState('default');
+  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
+  const [newViewName, setNewViewName] = useState('');
+  const [isCreatingView, setIsCreatingView] = useState(false);
+
+  // Refs
+  const dragItem = useRef(null);
+  const dragOverItem = useRef(null);
+  const resizingColumn = useRef(null);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  // 選択肢生成
+  const uniquePols = useMemo(() => [...new Set(data.map(d => d.pol).filter(Boolean))].sort(), [data]);
+  const uniquePods = useMemo(() => [...new Set(data.map(d => d.pod).filter(Boolean))].sort(), [data]);
+  const uniqueCountries = useMemo(() => [...new Set(data.map(d => d.country).filter(Boolean))].sort(), [data]);
+
+  // --- ビュー関連関数 ---
+  const applyView = (viewId) => {
+    const view = views.find(v => v.id === viewId);
+    if (!view) return;
+
+    setColumns(view.settings.columns);
+    setFilterConditions(view.settings.filterConditions);
+    setSortConfig(view.settings.sortConfig || []);
+    setWarningSettings(view.settings.warningSettings);
+    setDisplaySettings(view.settings.displaySettings);
+    setCurrentViewId(viewId);
+    setIsViewDropdownOpen(false);
+  };
+
+  const saveNewView = () => {
+    if (!newViewName.trim()) return;
+    const newView = {
+      id: Date.now().toString(),
+      name: newViewName,
+      settings: {
+        columns,
+        filterConditions,
+        sortConfig,
+        warningSettings,
+        displaySettings
+      }
+    };
+    setViews([...views, newView]);
+    setCurrentViewId(newView.id);
+    setNewViewName('');
+    setIsCreatingView(false);
+    setIsViewDropdownOpen(false);
+  };
+
+  const deleteView = (e, viewId) => {
+    e.stopPropagation();
+    if (viewId === 'default') return;
+    setViews(views.filter(v => v.id !== viewId));
+    if (currentViewId === viewId) {
+      applyView('default');
+    }
+  };
+
+  // --- アラートスタイル ---
   const alertStyles = {
     rose: { text: 'text-rose-600', icon: 'text-rose-500', bg: 'bg-rose-50', border: 'border-rose-100', title: 'text-rose-900', accent: 'accent-rose-500', range: 'text-rose-600' },
     amber: { text: 'text-amber-600', icon: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-100', title: 'text-amber-900', accent: 'accent-amber-500', range: 'text-amber-600' },
@@ -253,7 +445,7 @@ const App = () => {
   const currentAlertStyle = getAlertStyles();
   const today = new Date('2026-02-09');
 
-  // --- 汎用判定ロジック (AND/OR 対応版) ---
+  // --- 汎用判定ロジック ---
   const checkConditions = (item, cond, matchMode = 'AND') => {
     const checks = [];
 
@@ -303,7 +495,22 @@ const App = () => {
     }
   };
 
-  // --- 6. 検索・フィルタ・ソートロジックの統合 ---
+  // --- カラムごとのフィルター状態判定 ---
+  const checkIfColumnFiltered = (colId) => {
+    switch (colId) {
+      case 'pol': return filterConditions.pol !== 'all';
+      case 'pod': return filterConditions.pod !== 'all';
+      case 'country': return filterConditions.country !== 'all';
+      case 'customer': return filterConditions.customer !== 'all';
+      case 'etd': return !!(filterConditions.etdFrom || filterConditions.etdTo);
+      case 'blDate': return !!(filterConditions.blDateFrom || filterConditions.blDateTo);
+      case 'flagDereg': return filterConditions.flagDereg !== 'all';
+      case 'flagOdo': return filterConditions.flagOdo !== 'all';
+      default: return false;
+    }
+  };
+
+  // --- 検索・フィルタ・ソートロジック ---
   const processedData = useMemo(() => {
     let result = data.filter(item => {
       const matchesSearch = Object.values(item).some(val => 
@@ -313,51 +520,79 @@ const App = () => {
       return matchesSearch && matchesFilter;
     });
 
-    if (sortConfig.key) {
+    // マルチソート対応
+    if (sortConfig.length > 0) {
       result.sort((a, b) => {
-        let valA = a[sortConfig.key];
-        let valB = b[sortConfig.key];
-        if (sortConfig.key.toLowerCase().includes('date') || sortConfig.key === 'etd') {
-            valA = valA ? new Date(valA).getTime() : 0;
-            valB = valB ? new Date(valB).getTime() : 0;
-        } else {
-            valA = String(valA || '').toLowerCase();
-            valB = String(valB || '').toLowerCase();
+        for (const sort of sortConfig) {
+          const { key, direction } = sort;
+          let valA = a[key];
+          let valB = b[key];
+
+          if (key.toLowerCase().includes('date') || key === 'etd') {
+              valA = valA ? new Date(valA).getTime() : 0;
+              valB = valB ? new Date(valB).getTime() : 0;
+          } else {
+              valA = String(valA || '').toLowerCase();
+              valB = String(valB || '').toLowerCase();
+          }
+
+          if (valA < valB) return direction === 'asc' ? -1 : 1;
+          if (valA > valB) return direction === 'asc' ? 1 : -1;
         }
-        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
+        return 0; // すべて同じなら順序維持
       });
     }
     return result;
   }, [data, searchText, filterConditions, sortConfig]);
 
-  // フィルタやソートが変わったらページをリセット
   useEffect(() => {
     setCurrentPage(1);
   }, [searchText, filterConditions, sortConfig]);
 
-  // ページネーションデータの計算
   const totalItems = processedData.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedData = processedData.slice(startIndex, startIndex + itemsPerPage);
 
-  const handleSort = (columnId) => {
+  // ソートハンドラ (マルチソート対応)
+  const handleSort = (columnId, e) => {
     if (columnId === 'rowNo') return;
-    let direction = 'asc';
-    if (sortConfig.key === columnId) {
-      if (sortConfig.direction === 'asc') {
-        direction = 'desc';
+
+    setSortConfig(current => {
+      const existingIndex = current.findIndex(item => item.key === columnId);
+      
+      // Shiftキーが押されている場合は複数ソートモード
+      if (e.shiftKey) {
+        const newConfig = [...current];
+        if (existingIndex > -1) {
+          // 既に存在する場合: asc -> desc -> 解除
+          if (newConfig[existingIndex].direction === 'asc') {
+            newConfig[existingIndex].direction = 'desc';
+          } else {
+            newConfig.splice(existingIndex, 1);
+          }
+        } else {
+          // 新規追加
+          newConfig.push({ key: columnId, direction: 'asc' });
+        }
+        return newConfig;
       } else {
-        setSortConfig({ key: null, direction: 'asc' });
-        return;
+        // 通常クリック（単一ソート）
+        // 既に単一選択されていて、かつ同じカラムならトグル
+        if (current.length === 1 && current[0].key === columnId) {
+          if (current[0].direction === 'asc') {
+            return [{ key: columnId, direction: 'desc' }];
+          } else {
+            return []; // 解除
+          }
+        }
+        // それ以外は新規単一ソート
+        return [{ key: columnId, direction: 'asc' }];
       }
-    }
-    setSortConfig({ key: columnId, direction });
+    });
   };
 
-  // --- 7. 警告判定ロジック ---
+  // --- 警告判定 (スコープ削除済み) ---
   const getRowWarnings = (row) => {
     const warnings = [];
     if (warningSettings.etdEnabled) {
@@ -371,7 +606,7 @@ const App = () => {
     return warnings;
   };
 
-  // --- 8. コピー・フィル機能 ---
+  // --- アクション関数群 ---
   const copyFromAbove = (rowId, field) => {
     const currentIndex = data.findIndex(r => r.id === rowId);
     if (currentIndex > 0) {
@@ -437,47 +672,6 @@ const App = () => {
     );
   };
 
-  // --- 列幅入力用コンポーネント ---
-  const ColumnWidthInput = ({ colId, width, onUpdate }) => {
-    const [tempValue, setTempValue] = useState(width);
-
-    useEffect(() => {
-      setTempValue(width);
-    }, [width]);
-
-    const handleChange = (e) => {
-      setTempValue(e.target.value);
-    };
-
-    const handleBlur = () => {
-      const val = parseInt(tempValue);
-      if (!isNaN(val) && val > 0) {
-        onUpdate(colId, val);
-      } else {
-        setTempValue(width); // 元に戻す
-      }
-    };
-
-    const handleKeyDown = (e) => {
-      if (e.key === 'Enter') {
-        handleBlur();
-        e.target.blur();
-      }
-    };
-
-    return (
-      <input 
-        type="number" 
-        value={tempValue}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        className="w-14 p-1 border border-slate-200 rounded text-right text-[10px] focus:ring-1 ring-indigo-500 outline-none"
-      />
-    );
-  };
-
-  // --- 列幅リサイズ関数 ---
   const startResizing = (e, colId) => {
     e.preventDefault();
     e.stopPropagation();
@@ -510,6 +704,11 @@ const App = () => {
       col.id === colId ? { ...col, visible: !col.visible } : col
     ));
   };
+  const toggleColumnSticky = (colId) => {
+    setColumns(prev => prev.map(col => 
+      col.id === colId ? { ...col, sticky: !col.sticky } : col
+    ));
+  };
   const moveColumn = (index, direction) => {
     const newColumns = [...columns];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
@@ -519,7 +718,6 @@ const App = () => {
     }
   };
 
-  // DnD Handlers
   const handleDragStart = (e, index) => { dragItem.current = index; e.dataTransfer.effectAllowed = "move"; };
   const handleDragEnter = (e, index) => { dragOverItem.current = index; };
   const handleDragEnd = (e) => {
@@ -532,94 +730,6 @@ const App = () => {
     setColumns(newColumns);
     dragItem.current = null;
     dragOverItem.current = null;
-  };
-
-  // --- 共通フィルタフォームコンポーネント ---
-  const FilterForm = ({ conditions, setConditions, showCustomer = true, onReset }) => {
-    const update = (field, value) => setConditions(prev => ({ ...prev, [field]: value }));
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase">積出港 (POL)</label>
-            <select value={conditions.pol || 'all'} onChange={(e) => update('pol', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
-              <option value="all">指定なし</option>
-              {uniquePols.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase">荷揚港 (POD)</label>
-            <select value={conditions.pod || 'all'} onChange={(e) => update('pod', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
-              <option value="all">指定なし</option>
-              {uniquePods.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Calendar size={12}/> ETD 期間</label>
-          <div className="flex items-center gap-2">
-            <input type="date" value={conditions.etdFrom || ''} onChange={(e) => update('etdFrom', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px]" />
-            <span className="text-slate-400">~</span>
-            <input type="date" value={conditions.etdTo || ''} onChange={(e) => update('etdTo', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px]" />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Calendar size={12}/> B/L日 期間</label>
-          <div className="flex items-center gap-2">
-            <input type="date" value={conditions.blDateFrom || ''} onChange={(e) => update('blDateFrom', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px]" />
-            <span className="text-slate-400">~</span>
-            <input type="date" value={conditions.blDateTo || ''} onChange={(e) => update('blDateTo', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px]" />
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase">荷揚国</label>
-          <select value={conditions.country || 'all'} onChange={(e) => update('country', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
-            <option value="all">指定なし</option>
-            {uniqueCountries.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase">抹消ステータス</label>
-            <select value={conditions.flagDereg || 'all'} onChange={(e) => update('flagDereg', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
-              <option value="all">指定なし</option>
-              <option value="complete">完了のみ</option>
-              <option value="incomplete">未完了のみ</option>
-            </select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase">ODOステータス</label>
-            <select value={conditions.flagOdo || 'all'} onChange={(e) => update('flagOdo', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
-              <option value="all">指定なし</option>
-              <option value="complete">完了のみ</option>
-              <option value="incomplete">未完了のみ</option>
-            </select>
-          </div>
-        </div>
-
-        {showCustomer && (
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase">顧客</label>
-            <select value={conditions.customer || 'all'} onChange={(e) => update('customer', e.target.value)} className="w-full p-1.5 border border-slate-200 rounded text-[11px] bg-slate-50">
-              <option value="all">指定なし</option>
-              <option value="Global Motors">Global Motors</option>
-              <option value="Pacific Trading">Pacific Trading</option>
-              <option value="Euro Cars">Euro Cars</option>
-            </select>
-          </div>
-        )}
-        
-        {onReset && (
-           <button onClick={onReset} className="w-full py-2 text-[11px] text-slate-500 font-bold hover:bg-slate-100 rounded border border-slate-200 transition-all flex items-center justify-center gap-1">
-             <ResetIcon size={12} /> 条件をリセット
-           </button>
-        )}
-      </div>
-    );
   };
 
   return (
@@ -637,6 +747,7 @@ const App = () => {
               <p className="text-[9px] opacity-70 font-medium uppercase tracking-widest">Enterprise Edition v1.0</p>
             </div>
           </div>
+          
           <div className="flex bg-white/10 rounded-lg h-9 items-center border border-white/20 focus-within:ring-2 ring-white/50 transition-all px-3">
             <Search size={14} className="opacity-60" />
             <input 
@@ -650,6 +761,71 @@ const App = () => {
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* ビュー切り替えドロップダウン */}
+          <div className="relative">
+            <button 
+              onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded border border-white/20 transition-all text-xs font-medium"
+            >
+              <LayoutTemplate size={14} />
+              <span>{views.find(v => v.id === currentViewId)?.name || 'カスタムビュー'}</span>
+              <ChevronDown size={12} className="opacity-70" />
+            </button>
+
+            {isViewDropdownOpen && (
+              <div className="absolute top-full right-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="p-2 border-b border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase px-2">ビューの切り替え</span>
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  {views.map(view => (
+                    <div 
+                      key={view.id} 
+                      onClick={() => applyView(view.id)}
+                      className={`flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-slate-50 ${currentViewId === view.id ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-700'}`}
+                    >
+                      <span className="text-xs truncate">{view.name}</span>
+                      <div className="flex items-center gap-1">
+                        {currentViewId === view.id && <Check size={14} className="text-indigo-600" />}
+                        {view.id !== 'default' && (
+                          <button onClick={(e) => deleteView(e, view.id)} className="p-1 text-slate-400 hover:text-rose-500 rounded hover:bg-rose-50">
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-2 border-t border-slate-100 bg-slate-50">
+                  {!isCreatingView ? (
+                    <button 
+                      onClick={() => setIsCreatingView(true)}
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 rounded border border-indigo-200 bg-white transition-all"
+                    >
+                      <Plus size={14} /> 現在の条件で保存
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <input 
+                        type="text" 
+                        placeholder="ビュー名を入力..." 
+                        value={newViewName}
+                        onChange={(e) => setNewViewName(e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded focus:border-indigo-500 outline-none text-slate-800"
+                        autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && saveNewView()}
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={saveNewView} className="flex-1 py-1 bg-indigo-600 text-white text-xs rounded font-bold hover:bg-indigo-700">保存</button>
+                        <button onClick={() => setIsCreatingView(false)} className="flex-1 py-1 bg-slate-200 text-slate-600 text-xs rounded font-bold hover:bg-slate-300">キャンセル</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <button onClick={() => {setSettingsOpen(!settingsOpen); setActiveTab('filter')}} className={`flex items-center gap-2 px-3 py-2 rounded-md transition-all ${activeTab === 'filter' && settingsOpen ? 'bg-white/20 ring-1 ring-white/40' : 'hover:bg-white/10'}`}>
             <Filter size={16} /> <span>フィルタ</span>
           </button>
@@ -685,12 +861,17 @@ const App = () => {
                        if (array[i].sticky) leftPos += array[i].width;
                      }
                   }
-                  const isSorted = sortConfig.key === col.id;
+                  
+                  // ソート状態の判定
+                  const sortState = sortConfig.find(s => s.key === col.id);
+                  const isSorted = !!sortState;
+                  const sortIndex = sortConfig.findIndex(s => s.key === col.id) + 1;
                   const canSort = col.id !== 'rowNo';
+
                   return (
                     <th
                       key={col.id}
-                      onClick={() => canSort && handleSort(col.id)}
+                      onClick={(e) => canSort && handleSort(col.id, e)}
                       style={{ 
                         width: `${col.width}px`, 
                         left: col.sticky ? `${leftPos}px` : 'auto',
@@ -705,11 +886,29 @@ const App = () => {
                       `}
                     >
                       <div className="flex items-center justify-between truncate gap-1">
-                        <span className="truncate uppercase opacity-90">{col.label}</span>
+                        <div className="flex items-center gap-1.5 truncate">
+                          {/* ロックアイコン */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleColumnSticky(col.id);
+                            }}
+                            className="text-white/50 hover:text-white transition-colors p-0.5 rounded hover:bg-white/20"
+                            title={col.sticky ? "固定解除" : "列を固定"}
+                          >
+                            {col.sticky ? <Lock size={10} /> : <Unlock size={10} />}
+                          </button>
+                          <span className="truncate uppercase opacity-90">{col.label}</span>
+                        </div>
+                        
                         {canSort && (
-                          <div className={`shrink-0 ${isSorted ? 'opacity-100 text-amber-300' : 'opacity-30'}`}>
+                          <div className={`shrink-0 flex items-center ${isSorted ? 'opacity-100 text-amber-300' : 'opacity-30'}`}>
+                            {/* 複数ソート時の番号表示 */}
+                            {isSorted && sortConfig.length > 1 && (
+                              <span className="text-[9px] font-mono mr-0.5 leading-none">{sortIndex}</span>
+                            )}
                             {isSorted ? (
-                              sortConfig.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />
+                              sortState.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />
                             ) : (
                               <ArrowUpDown size={10} />
                             )}
@@ -773,6 +972,11 @@ const App = () => {
                         textClass = `${currentAlertStyle.text} font-bold`;
                       }
 
+                      // フィルター適用時のハイライト判定
+                      const isColFiltered = checkIfColumnFiltered(col.id);
+                      // ハイライトクラス: フィルター適用中は黄色背景
+                      const filterHighlightClass = isColFiltered ? "bg-yellow-100 font-bold text-slate-800 px-1 rounded" : "";
+
                       return (
                         <td
                           key={col.id}
@@ -813,7 +1017,7 @@ const App = () => {
                                   className="w-full bg-white border border-sky-400 rounded px-1 py-0 outline-none h-5 text-[11px]"
                                 />
                               ) : (
-                                <span className="truncate w-full">
+                                <span className={`truncate w-full ${filterHighlightClass}`}>
                                   {col.id === 'country' ? (
                                     <span>{getFlagEmoji(value)} {highlightText(value, searchText)}</span>
                                   ) : col.id === 'flagDereg' || col.id === 'flagOdo' ? (
@@ -889,7 +1093,10 @@ const App = () => {
                   <FilterForm 
                     conditions={filterConditions} 
                     setConditions={setFilterConditions} 
-                    showVessel={false} 
+                    showVessel={false}
+                    uniquePols={uniquePols}
+                    uniquePods={uniquePods}
+                    uniqueCountries={uniqueCountries} 
                   />
                   
                   <button onClick={() => setFilterConditions(defaultFilterConditions)} className="w-full py-2 text-[11px] text-rose-500 font-bold hover:bg-rose-50 rounded border border-rose-100 transition-all">全フィルターリセット</button>
@@ -1089,6 +1296,9 @@ const App = () => {
                           })} 
                           // リセットボタン追加
                           onReset={() => setDisplaySettings(prev => ({ ...prev, highlightConditions: { ...defaultHighlightConditions, active: true } }))}
+                          uniquePols={uniquePols}
+                          uniquePods={uniquePods}
+                          uniqueCountries={uniqueCountries}
                         />
                       </div>
                     )}
